@@ -39,8 +39,8 @@ from parser_app.models import Product
 HOME_URL = "https://brain.com.ua/"
 SEARCH_QUERY = "Apple iPhone 15 128GB Black"
 
-DEFAULT_TEXT = "None"
-DEFAULT_PRICE = Decimal("0.00")
+DEFAULT_TEXT: Optional[str] = None
+DEFAULT_PRICE: Optional[Decimal] = None
 WAIT_TIMEOUT = 25
 
 CHAR_COLOR = "Колір"
@@ -61,25 +61,27 @@ logger = logging.getLogger(__name__)
 class ProductData:
     """Structured DTO for parsed product data."""
 
-    name: str = DEFAULT_TEXT
-    color: str = DEFAULT_TEXT
-    memory: str = DEFAULT_TEXT
-    manufacturer: str = DEFAULT_TEXT
-    price: Decimal = DEFAULT_PRICE
-    price_discount: Decimal = DEFAULT_PRICE
-    photos: list[str] = field(default_factory=list)
-    goods_code: str = "UNKNOWN"
-    reviews_count: int = 0
-    screen_size: str = DEFAULT_TEXT
-    screen_resolution: str = DEFAULT_TEXT
-    characteristics: dict[str, str] = field(default_factory=dict)
+    name: Optional[str] = DEFAULT_TEXT
+    color: Optional[str] = DEFAULT_TEXT
+    memory: Optional[str] = DEFAULT_TEXT
+    manufacturer: Optional[str] = DEFAULT_TEXT
+    price: Optional[Decimal] = DEFAULT_PRICE
+    price_discount: Optional[Decimal] = DEFAULT_PRICE
+    photos: Optional[list[str]] = None
+    goods_code: Optional[str] = None
+    reviews_count: Optional[int] = None
+    screen_size: Optional[str] = DEFAULT_TEXT
+    screen_resolution: Optional[str] = DEFAULT_TEXT
+    characteristics: Optional[dict[str, str]] = None
 
     def to_dict(self) -> dict[str, Any]:
         """Convert parsed product data to dictionary."""
         return asdict(self)
 
 
-def clean_text(value: Optional[str], default: str = DEFAULT_TEXT) -> str:
+def clean_text(
+    value: Optional[str], default: Optional[str] = DEFAULT_TEXT
+) -> Optional[str]:
     """Normalize whitespace and return default if the value is empty."""
     if not value:
         return default
@@ -87,7 +89,9 @@ def clean_text(value: Optional[str], default: str = DEFAULT_TEXT) -> str:
     return normalized if normalized else default
 
 
-def to_decimal(value: Optional[str], default: Decimal = DEFAULT_PRICE) -> Decimal:
+def to_decimal(
+    value: Optional[str], default: Optional[Decimal] = DEFAULT_PRICE
+) -> Optional[Decimal]:
     """Convert a price-like string to Decimal."""
     if not value:
         return default
@@ -236,16 +240,22 @@ class BrainProductParser:
 
         return ProductData(
             name=self._parse_name(),
-            color=characteristics.get(CHAR_COLOR, DEFAULT_TEXT),
-            memory=characteristics.get(CHAR_MEMORY, DEFAULT_TEXT),
-            manufacturer=characteristics.get(CHAR_MANUFACTURER, DEFAULT_TEXT),
+            color=characteristics.get(CHAR_COLOR) if characteristics else None,
+            memory=characteristics.get(CHAR_MEMORY) if characteristics else None,
+            manufacturer=characteristics.get(CHAR_MANUFACTURER)
+            if characteristics
+            else None,
             price=self._parse_price(),
             price_discount=self._parse_price_discount(),
             photos=self._parse_photos(goods_code),
             goods_code=goods_code,
             reviews_count=self._parse_reviews_count(),
-            screen_size=characteristics.get(CHAR_SCREEN_SIZE, DEFAULT_TEXT),
-            screen_resolution=characteristics.get(CHAR_SCREEN_RESOLUTION, DEFAULT_TEXT),
+            screen_size=characteristics.get(CHAR_SCREEN_SIZE)
+            if characteristics
+            else None,
+            screen_resolution=characteristics.get(CHAR_SCREEN_RESOLUTION)
+            if characteristics
+            else None,
             characteristics=characteristics,
         )
 
@@ -262,14 +272,18 @@ class BrainProductParser:
             return None
 
     @staticmethod
-    def _element_text(element: Optional[WebElement], default: str = "") -> str:
+    def _element_text(
+        element: Optional[WebElement], default: Optional[str] = None
+    ) -> Optional[str]:
         """Return normalized visible text from an element."""
         if element is None:
             return default
         return clean_text(element.text, default=default)
 
     @staticmethod
-    def _element_text_content(element: Optional[WebElement], default: str = "") -> str:
+    def _element_text_content(
+        element: Optional[WebElement], default: Optional[str] = None
+    ) -> Optional[str]:
         """Return normalized textContent from an element."""
         if element is None:
             return default
@@ -278,13 +292,13 @@ class BrainProductParser:
     def _get_text_by_selectors(
         self,
         selectors: list[str],
-        default: str = DEFAULT_TEXT,
+        default: Optional[str] = DEFAULT_TEXT,
         parent: Optional[WebElement] = None,
-    ) -> str:
+    ) -> Optional[str]:
         """Return the first non-empty text found by the provided CSS selectors."""
         for selector in selectors:
             element = self._find_optional(selector, parent=parent)
-            text = self._element_text(element, default="")
+            text = self._element_text(element, default=None)
             if text:
                 return text
         return default
@@ -293,10 +307,10 @@ class BrainProductParser:
         self,
         selectors: list[str],
         parent: Optional[WebElement] = None,
-    ) -> Decimal:
-        """Return the first non-zero decimal parsed from the provided CSS selectors."""
-        raw_value = self._get_text_by_selectors(selectors, default="", parent=parent)
-        return to_decimal(raw_value, default=DEFAULT_PRICE)
+    ) -> Optional[Decimal]:
+        """Return the first decimal parsed from the provided CSS selectors."""
+        raw_value = self._get_text_by_selectors(selectors, default=None, parent=parent)
+        return to_decimal(raw_value, default=None)
 
     def _expand_characteristics_if_needed(self) -> None:
         """Expand the characteristics section if the expand button is present."""
@@ -304,7 +318,7 @@ class BrainProductParser:
         if button is None:
             return
 
-        button_text = self._element_text(button, default="")
+        button_text = self._element_text(button, default=None) or ""
         if "Всі характеристики" not in button_text:
             return
 
@@ -318,37 +332,37 @@ class BrainProductParser:
             lambda driver: "Всі характеристики"
             not in clean_text(
                 driver.find_element(By.CSS_SELECTOR, self.CHARACTERISTICS_BUTTON).text,
-                default="",
+                default=None,
             )
         )
 
-    def _parse_name(self) -> str:
+    def _parse_name(self) -> Optional[str]:
         """Parse product full name."""
-        return self._get_text_by_selectors([self.PRODUCT_NAME], default=DEFAULT_TEXT)
+        return self._get_text_by_selectors([self.PRODUCT_NAME], default=None)
 
-    def _parse_price(self) -> Decimal:
+    def _parse_price(self) -> Optional[Decimal]:
         """Parse regular price from the main right block."""
         container = self._find_optional(self.MAIN_RIGHT_BLOCK)
         if container is None:
             logger.warning("Regular price container not found.")
-            return DEFAULT_PRICE
+            return None
 
         price = self._get_decimal_by_selectors(self.PRICE_SELECTORS, parent=container)
-        if price == DEFAULT_PRICE:
-            logger.warning("Regular price not found. Using default price.")
+        if price is None:
+            logger.warning("Regular price not found.")
         return price
 
-    def _parse_price_discount(self) -> Decimal:
-        """Parse old price shown before discount. Return 0.00 if absent."""
+    def _parse_price_discount(self) -> Optional[Decimal]:
+        """Parse old price shown before discount."""
         container = self._find_optional(self.MAIN_RIGHT_BLOCK)
         if container is None:
-            return DEFAULT_PRICE
+            return None
 
         return self._get_decimal_by_selectors(
             self.DISCOUNT_PRICE_SELECTORS, parent=container
         )
 
-    def _parse_goods_code(self) -> str:
+    def _parse_goods_code(self) -> Optional[str]:
         """Parse product code from the dedicated product code block."""
         try:
             product_code_block = WebDriverWait(self.driver, 10).until(
@@ -359,29 +373,29 @@ class BrainProductParser:
             value_element = product_code_block.find_element(
                 By.CSS_SELECTOR, self.PRODUCT_CODE_VALUE
             )
-            goods_code = self._element_text_content(value_element, default="")
+            goods_code = self._element_text_content(value_element, default=None)
             if goods_code:
                 return goods_code
         except (TimeoutException, NoSuchElementException):
             pass
 
         logger.warning("Product code not found.")
-        return "UNKNOWN"
+        return None
 
-    def _parse_reviews_count(self) -> int:
+    def _parse_reviews_count(self) -> Optional[int]:
         """Parse reviews count from the reviews link span."""
         for link in self.driver.find_elements(By.CSS_SELECTOR, self.REVIEWS_LINK):
             try:
                 raw_value = clean_text(
-                    link.find_element(By.TAG_NAME, "span").text, default=""
+                    link.find_element(By.TAG_NAME, "span").text, default=None
                 )
                 if raw_value:
                     return int(raw_value)
             except (NoSuchElementException, ValueError):
                 continue
-        return 0
+        return None
 
-    def _parse_photos(self, goods_code: str) -> list[str]:
+    def _parse_photos(self, goods_code: Optional[str]) -> Optional[list[str]]:
         """Parse unique product photo URLs from gallery DOM elements."""
         photos: list[str] = []
 
@@ -390,25 +404,27 @@ class BrainProductParser:
                 src = (image.get_attribute("src") or "").strip()
                 if not src:
                     continue
-                if goods_code != "UNKNOWN" and goods_code not in src:
+                if goods_code and goods_code not in src:
                     continue
                 photos.append(src)
 
+        if not photos:
+            return None
         return deduplicate_preserve_order(photos)
 
-    def _parse_characteristics(self) -> dict[str, str]:
+    def _parse_characteristics(self) -> Optional[dict[str, str]]:
         """Parse all product characteristics as a flat key-value dictionary."""
         characteristics: dict[str, str] = {}
 
         root = self._find_optional(self.CHARACTERISTICS_ROOT)
         if root is None:
             logger.warning("Characteristics root block '#br-pr-7' not found.")
-            return characteristics
+            return None
 
         items = root.find_elements(By.CSS_SELECTOR, self.CHARACTERISTICS_ITEMS)
         if not items:
             logger.warning("No characteristic groups found inside '#br-pr-7'.")
-            return characteristics
+            return None
 
         for item in items:
             for row in item.find_elements(By.XPATH, "./div/div"):
@@ -417,7 +433,7 @@ class BrainProductParser:
                     key, value = parsed_row
                     characteristics[key] = value
 
-        return characteristics
+        return characteristics or None
 
     @staticmethod
     def _parse_characteristic_row(row: WebElement) -> Optional[tuple[str, str]]:
@@ -426,8 +442,8 @@ class BrainProductParser:
         if len(spans) < 2:
             return None
 
-        key = clean_text(spans[0].text, default="")
-        value = clean_text(spans[1].text, default="")
+        key = clean_text(spans[0].text, default=None)
+        value = clean_text(spans[1].text, default=None)
         if not key:
             return None
 
@@ -435,32 +451,50 @@ class BrainProductParser:
 
 
 def save_product(product_data: ProductData) -> Product:
-    """Save product using update_or_create."""
-    if product_data.goods_code == "UNKNOWN":
-        raise ValueError("Cannot save product with UNKNOWN goods_code.")
+    """Save product, avoiding duplicate goods_code unique constraint errors.
 
-    product, created = Product.objects.update_or_create(
+    Uses get_or_create to return existing product when a product with the
+    same goods_code already exists, otherwise creates a new one.
+    """
+    if not product_data.goods_code:
+        raise ValueError("Cannot save product without goods_code.")
+
+    defaults = {
+        "name": product_data.name,
+        "color": product_data.color,
+        "memory": product_data.memory,
+        "manufacturer": product_data.manufacturer,
+        "price": product_data.price,
+        "price_discount": product_data.price_discount,
+        "photos": product_data.photos,
+        "reviews_count": product_data.reviews_count,
+        "screen_size": product_data.screen_size,
+        "screen_resolution": product_data.screen_resolution,
+        "characteristics": product_data.characteristics,
+    }
+
+    product, created = Product.objects.get_or_create(
         goods_code=product_data.goods_code,
-        defaults={
-            "name": product_data.name,
-            "color": product_data.color,
-            "memory": product_data.memory,
-            "manufacturer": product_data.manufacturer,
-            "price": product_data.price,
-            "price_discount": product_data.price_discount,
-            "photos": product_data.photos,
-            "reviews_count": product_data.reviews_count,
-            "screen_size": product_data.screen_size,
-            "screen_resolution": product_data.screen_resolution,
-            "characteristics": product_data.characteristics,
-        },
+        defaults=defaults,
     )
 
-    logger.info(
-        "%s product with goods_code=%s",
-        "Created" if created else "Updated",
-        product.goods_code,
-    )
+    if not created:
+        # Optionally update fields if parsed data is newer/complete — here we
+        # update only when parsed value is not None to avoid overwriting with
+        # empty values.
+        updated = False
+        for field, value in defaults.items():
+            if value is not None and getattr(product, field) != value:
+                setattr(product, field, value)
+                updated = True
+        if updated:
+            product.save()
+            logger.info("Updated existing product with goods_code=%s", product.goods_code)
+        else:
+            logger.info("Found existing product with goods_code=%s, no changes applied", product.goods_code)
+    else:
+        logger.info("Created product with goods_code=%s", product.goods_code)
+
     return product
 
 
@@ -496,9 +530,6 @@ def main() -> None:
         raise
     except WebDriverException as exc:
         logger.exception("Selenium WebDriver error: %s", exc)
-        raise
-    except Exception as exc:
-        logger.exception("Unexpected error during parsing workflow: %s", exc)
         raise
 
     print(json.dumps(product_data.to_dict(), ensure_ascii=False, indent=4, default=str))
